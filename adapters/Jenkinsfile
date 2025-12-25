@@ -1,0 +1,35 @@
+pipeline {
+    agent any
+    stages {
+        stage('AI Feed (Fast Scans)') {
+            steps {
+                parallel(
+                    "SAST": { sh "docker run --rm -v ${WORKSPACE}:/src semgrep/semgrep semgrep scan --config=auto --sarif -o semgrep.sarif" },
+                    "Secrets": { sh "docker run --rm -v ${WORKSPACE}:/path zricethezav/gitleaks:latest detect --source='/path' --report-path='/path/gitleaks.sarif' --format='sarif' --exit-code=0" },
+                    "IaC": { sh "docker run --rm -v ${WORKSPACE}:/tf bridgecrew/checkov:latest -d /tf --output sarif --soft-fail > checkov.sarif" },
+                    "SCA": { sh "docker run --rm -v ${WORKSPACE}:/root/ aquasec/trivy:latest fs /root/ --format sarif --output trivy.sarif" }
+                )
+                // Trigger AI Brain immediately
+                sh """
+                    curl -X POST ${AI_BRAIN_URL}/triage \
+                        -H "Authorization: Bearer ${AI_API_KEY}" \
+                        -F "project_name=${JOB_NAME}" \
+                        -F "commit_sha=${GIT_COMMIT}" \
+                        -F "branch=${BRANCH_NAME}" \
+                        -F "event_name=push" \
+                        -F "run_id=${BUILD_ID}" \
+                        -F "files=@semgrep.sarif" -F "files=@gitleaks.sarif" -F "files=@checkov.sarif" -F "files=@trivy.sarif"
+                """
+            }
+        }
+        stage('Background Quality Audit') {
+            steps {
+                // Slower tools run here without blocking the AI-initiated commit/PR
+                script {
+                    sh "docker run --rm -v ${WORKSPACE}:/usr/src sonarsource/sonar-scanner-cli"
+                    sh "docker run --rm ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://app:80 -J z.json || true"
+                }
+            }
+        }
+    }
+}

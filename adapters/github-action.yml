@@ -1,0 +1,129 @@
+name: Agentic AI Security Flow
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+permissions:
+  contents: read
+  security-events: write  # Required for uploading SARIF to GitHub Code Scanning
+  actions: read           # Optional, for artifact access if needed
+
+jobs:
+  ai-triage-and-patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Needed for some scanners and full context
+
+      # 1. Run Security Scanners using official, maintained actions (more reliable & integrated)
+      - name: Run Semgrep
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: auto
+          generateSarif: "1"
+          sarifFile: semgrep.sarif
+        continue-on-error: true
+
+      - name: Run Gitleaks
+        uses: gitleaks/gitleaks-action@v2
+        with:
+          config-path: .gitleaks.toml  # optional – create if you want custom rules
+        env:
+          GITLEAKS_OUTPUT: gitleaks.sarif
+          GITLEAKS_FORMAT: sarif
+        continue-on-error: true
+
+      - name: Run Checkov (IaC & Secrets)
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: .
+          output_format: sarif
+          output_file_path: checkov.sarif
+          soft_fail: true
+        continue-on-error: true
+
+      - name: Run Trivy Filesystem Scan
+        uses: aquasec/trivy-action@master
+        with:
+          scan-type: 'fs'
+          format: 'sarif'
+          output: 'trivy.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM,LOW'
+        continue-on-error: true
+
+      # 2. Upload all SARIF reports to GitHub Code Scanning (Security tab)
+      - name: Upload SARIF to GitHub
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: .
+        if: always()
+
+      # 3. Upload raw reports as artifacts (for debugging & AI Brain)
+      - name: Upload Security Reports as Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-reports
+          path: |
+            semgrep.sarif
+            gitleaks.sarif
+            checkov.sarif
+            trivy.sarif
+            gitleaks.json  # in case Gitleaks produced JSON fallback
+        if: always()
+
+      # 4. Feed findings to Agentic AI Brain (runs always – even if scanners fail)
+      - name: Send Findings to AI Brain
+        if: always()
+        run: |
+          FILES_TO_SEND=""
+          for report in semgrep.sarif gitleaks.sarif checkov.sarif trivy.sarif gitleaks.json; do
+            if [ -f "$report" ]; then
+              FILES_TO_SEND="$FILES_TO_SEND -F $report=@$report"
+            fi
+          done
+
+          if [ -n "$FILES_TO_SEND" ]; then
+            echo "🚀 Sending security findings to AI Brain for triage and patching..."
+            curl -X POST ${{ secrets.AI_BRAIN_URL }}/triage \
+              -H "Authorization: Bearer ${{ secrets.AI_API_KEY }}" \
+              -F "project_name=${{ github.repository }}" \
+              -F "commit_sha=${{ github.sha }}" \
+              -F "branch=${{ github.ref_name }}" \
+              -F "event_name=${{ github.event_name }}" \
+              -F "run_id=${{ github.run_id }}" \
+              $FILES_TO_SEND
+
+            echo "✅ Findings successfully handed over to AI Brain."
+          else
+            echo "⚠️ No security reports generated – skipping AI Brain handover."
+          fi
+
+  quality-gate:
+    needs: ai-triage-and-patch
+    runs-on: ubuntu-latest
+    # Only proceed if the previous job succeeded (no critical failures in setup)
+    if: needs.ai-triage-and-patch.result == 'success'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: SonarQube Analysis
+        uses: sonarsource/sonarqube-scan-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+
+      # Optional: Fail the job if quality gate fails
+      - name: SonarQube Quality Gate Check
+        uses: sonarsource/sonarqube-quality-gate-action@master
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: ${{ secrets.SONAR_HOST_URL }}
+        timeout-minutes: 5

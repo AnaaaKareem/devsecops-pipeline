@@ -1,0 +1,47 @@
+stages:
+  - fast-scan
+  - triage
+  - quality-audit
+
+# 1. Run all fast tools in parallel
+# 1. Run all fast tools in parallel
+run-scanners:
+  stage: fast-scan
+  image: docker:latest
+  script:
+    - docker run --rm -v $PWD:/src semgrep/semgrep semgrep scan --config=auto --sarif -o semgrep.sarif &
+    - docker run --rm -v $PWD:/path zricethezav/gitleaks:latest detect --source="/path" --report-path="/path/gitleaks.json" --exit-code=0 &
+    # Ensure gitleaks.sarif is also generated or just use json if that's what we have. GH action uses gitleaks.sarif but also uploads json.
+    # The GH action command was: uses: gitleaks/gitleaks-action@v2 ... env: GITLEAKS_OUTPUT: gitleaks.sarif
+    # Adapting the docker command to output sarif if possible, or just keeping naming consistent.
+    # Gitleaks docker image supports -f sarif.
+    - docker run --rm -v $PWD:/path zricethezav/gitleaks:latest detect --source="/path" --report-path="/path/gitleaks.sarif" --format="sarif" --exit-code=0 &
+    - docker run --rm -v $PWD:/tf bridgecrew/checkov:latest -d /tf --output sarif --soft-fail > checkov.sarif &
+    - docker run --rm -v $PWD:/root/ aquasec/trivy:latest fs /root/ --format sarif --output trivy.sarif &
+    - wait
+  artifacts:
+    paths: [semgrep.sarif, gitleaks.sarif, checkov.sarif, trivy.sarif]
+
+# 2. Push to AI Brain to trigger agentic remediation
+ai-brain-triage:
+  stage: triage
+  script:
+    - |
+      curl -X POST $AI_BRAIN_URL/triage \
+        -H "Authorization: Bearer $AI_API_KEY" \
+        -F "project_name=$CI_PROJECT_PATH" \
+        -F "commit_sha=$CI_COMMIT_SHA" \
+        -F "branch=$CI_COMMIT_REF_NAME" \
+        -F "event_name=$CI_PIPELINE_SOURCE" \
+        -F "run_id=$CI_PIPELINE_ID" \
+        -F "files=@semgrep.sarif" \
+        -F "files=@gitleaks.sarif" \
+        -F "files=@checkov.sarif" \
+        -F "files=@trivy.sarif"
+
+# 3. SonarQube runs independently
+sonarqube-check:
+  stage: quality-audit
+  script:
+    - docker run --rm -e SONAR_HOST_URL=$SONAR_HOST_URL -v "$PWD:/usr/src" sonarsource/sonar-scanner-cli
+  allow_failure: true # Doesn't block the AI's work
