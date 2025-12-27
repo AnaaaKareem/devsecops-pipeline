@@ -1,0 +1,55 @@
+services:
+  # Database for results and feedback
+  db:
+    image: postgres:15.14-alpine3.21
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: security_brain
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  # The AI Security Brain API
+  api:
+    build: ./ai-agent
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/security_brain
+      - GITHUB_TOKEN=${GITHUB_TOKEN} # Needed for PR creation
+      - LLM_BASE_URL=${LLM_BASE_URL}
+      - LLM_MODEL=${LLM_MODEL}
+      - LLM_API_KEY=${LLM_API_KEY}
+      - AI_API_KEY=${AI_API_KEY}
+    volumes:
+      - ./ai-agent:/app
+      - /var/run/docker.sock:/var/run/docker.sock # Grants sandbox.py access to Docker
+    depends_on:
+      - db
+      - redis
+
+  # Dashboard Microservice (New)
+  dashboard:
+    build: ./dashboard
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8001"]
+    ports:
+      - "8001:8001"
+    environment:
+      - DATABASE_URL=postgresql://postgres:password@db:5432/security_brain
+      - REDIS_URL=redis://redis:6379/0
+    volumes:
+      - ./dashboard:/app
+    depends_on:
+      - db
+      - redis
+
+  # Redis Cache (New)
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  postgres_data:
