@@ -1,0 +1,76 @@
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  AI_URL: $AI_URL
+  AI_API_KEY: $AI_API_KEY
+
+build:
+  stage: build
+  script:
+    - echo "Building..."
+
+security_gate:
+  stage: test
+  script:
+    - echo "🚀 Uploading source code to AI Agent..."
+    - apt-get update && apt-get install -y zip curl jq
+    - zip -r source_code.zip . -x ".git/*"
+    - |
+      RESPONSE=$(curl -s -X POST $AI_URL/scan/upload \
+        -H "X-API-Key: $AI_API_KEY" \
+        -F "project=$CI_PROJECT_PATH" \
+        -F "branch=$CI_COMMIT_REF_NAME" \
+        -F "commit_sha=$CI_COMMIT_SHA" \
+        -F "ci_provider=GitLab-CI" \
+        -F "repo_url=$CI_PROJECT_URL" \
+        -F "run_url=$CI_JOB_URL" \
+        -F "file=@source_code.zip")
+      
+      echo "Response: $RESPONSE"
+      SCAN_ID=$(echo $RESPONSE | jq -r '.scan_id')
+      echo "Scan ID: $SCAN_ID"
+
+      echo "⏳ Polling status for Scan ID: $SCAN_ID..."
+      STATUS="pending"
+      LAST_STATUS=""
+
+      while true; do
+        RESPONSE=$(curl -s -X GET $AI_URL/scan_status/$SCAN_ID \
+          -H "X-API-Key: $AI_API_KEY")
+        
+        NEW_STATUS=$(echo $RESPONSE | jq -r '.status')
+        
+        if [[ -n "$NEW_STATUS" && "$NEW_STATUS" != "null" ]]; then
+          STATUS="$NEW_STATUS"
+        fi
+
+        if [[ "$STATUS" != "$LAST_STATUS" ]]; then
+          echo "Current Status: $STATUS"
+          LAST_STATUS="$STATUS"
+        fi
+
+        if [[ "$STATUS" == "completed" || "$STATUS" == "failed" || "$STATUS" == "timeout" ]]; then
+          break
+        fi
+
+        sleep 10
+      done
+
+      if [[ "$STATUS" != "completed" ]]; then
+        echo "❌ Scan Timed Out or Failed!"
+        exit 1
+      fi
+
+      RISK_SCORE=$(echo $RESPONSE | jq -r '.risk_score')
+      echo "Final Risk Score: $RISK_SCORE"
+      echo "✅ Security Gate Passed."
+
+deploy:
+  stage: deploy
+  script:
+    - echo "🚀 Deploying to Production..."
+  only:
+    - main

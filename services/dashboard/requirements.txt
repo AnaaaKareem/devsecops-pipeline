@@ -18,3 +18,5 @@ python-dotenv
 scikit-learn
 redis
 jinja2
+
+hvac>=2.1.0

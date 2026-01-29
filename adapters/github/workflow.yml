@@ -45,7 +45,7 @@ jobs:
             -F "project=${{ github.repository }}" \
             -F "branch=${{ github.ref_name }}" \
             -F "commit_sha=${{ github.sha }}" \
-            -F "ci_provider=github-actions-gated" \
+            -F "ci_provider=GitHub-Actions" \
             -F "repo_url=${{ github.server_url }}/${{ github.repository }}" \
             -F "run_url=${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
             -F "file=@source_code.zip")
@@ -60,19 +60,29 @@ jobs:
         run: |
           SCAN_ID=${{ steps.trigger_scan.outputs.scan_id }}
           STATUS="pending"
+          LAST_STATUS=""
           echo "⏳ Polling status for Scan ID: $SCAN_ID..."
 
-          while [[ "$STATUS" == "pending" || "$STATUS" == "processing" || "$STATUS" == "uploaded" || "$STATUS" == "scanning" || "$STATUS" == "analyzing" ]]; do
-            sleep 10
+          while true; do
             RESPONSE=$(curl -s -X GET ${{ secrets.AI_URL }}/scan_status/$SCAN_ID \
               -H "X-API-Key: ${{ secrets.AI_API_KEY }}")
             
-            STATUS=$(echo $RESPONSE | jq -r '.status')
+            NEW_STATUS=$(echo $RESPONSE | jq -r '.status')
             
+            if [[ -n "$NEW_STATUS" && "$NEW_STATUS" != "null" ]]; then
+              STATUS="$NEW_STATUS"
+            fi
+
             if [[ "$STATUS" != "$LAST_STATUS" ]]; then
               echo "Current Status: $STATUS"
               LAST_STATUS="$STATUS"
             fi
+
+            if [[ "$STATUS" == "completed" || "$STATUS" == "failed" || "$STATUS" == "timeout" ]]; then
+              break
+            fi
+
+            sleep 10
           done
 
           if [[ "$STATUS" != "completed" ]]; then
@@ -97,7 +107,7 @@ jobs:
   Deploy:
     needs: SecurityGate
     runs-on: ubuntu-latest
-    if: success()
+    if: success() && github.event_name == 'push'
     steps:
       - name: Deploy Application
         run: echo "🚀 Deploying to Production..."

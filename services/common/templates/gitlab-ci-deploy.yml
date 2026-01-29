@@ -1,0 +1,48 @@
+stages:
+  - fast-scan
+  - quality-audit
+  - deploy
+
+# 1. Run all fast tools in parallel
+run-scanners:
+  stage: fast-scan
+  image: docker:latest
+  script:
+    # 0. Start Application (Background)
+    - |
+      if [ -f "start.sh" ]; then
+        chmod +x start.sh
+        ./start.sh > app.log 2>&1 &
+        echo "Waiting for app to launch..."
+        sleep 15
+      else
+        echo "⚠️ No start.sh found."
+      fi
+
+    # 1. Run Scanners (Parallel)
+    - docker run --rm -v $PWD:/src returntocorp/semgrep semgrep scan --config=auto --sarif --quiet -o semgrep.sarif || echo '{"runs":[]}' > semgrep.sarif &
+    - docker run --rm -v $PWD:/path zricethezav/gitleaks:latest detect --source="/path" --report-path="/path/gitleaks.json" --no-banner --exit-code=0 || echo "[]" > gitleaks.json &
+    - docker run --rm -v $PWD:/tf bridgecrew/checkov:latest -d /tf --output sarif --quiet --no-guide --soft-fail > checkov.sarif || echo '{"runs":[]}' > checkov.sarif &
+    - docker run --rm -v $PWD:/root/ aquasecurity/trivy:latest fs /root/ --format sarif --output trivy.sarif --scanners vul,config,secret || echo '{"runs":[]}' > trivy.sarif &
+    - docker run --rm -v $PWD:/zap/wrk/:/zap/wrk/ --network host -t ghcr.io/zaproxy/zaproxy:stable zap-baseline.py -t http://localhost:80 -J z.json || true &
+    - wait
+
+  artifacts:
+    paths: [semgrep.sarif, gitleaks.json, checkov.sarif, trivy.sarif, z.json]
+
+# 2. SonarQube
+sonarqube-check:
+  stage: quality-audit
+  script:
+    - docker run --rm -e SONAR_HOST_URL=$SONAR_HOST_URL -v "$PWD:/usr/src" sonarsource/sonar-scanner-cli
+  allow_failure: true
+
+# 4. DEPLOYMENT (Added by AI Agent)
+deploy-prod:
+  stage: deploy
+  script:
+    - echo "🚀 Deploying to Production environment..."
+    - echo "Deployment logic goes here (e.g. docker push, helm upgrade, etc.)"
+    # - ./deploy.sh
+  only:
+    - main

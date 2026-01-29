@@ -8,7 +8,14 @@ datasources:
     isDefault: true
     jsonData:
       derivedFields:
-        - datasourceUid: split
+        - datasourceUid: trace_id
           matcherRegex: "trace_id=(\\w+)"
           name: TraceID
           url: "$${__value.raw}"
+
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    jsonData:
+      timeInterval: "5s"

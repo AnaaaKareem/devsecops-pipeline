@@ -9,3 +9,7 @@ numpy
 requests
 langchain-openai
 langchain-core
+redis
+
+
+hvac>=2.1.0

@@ -1,55 +1,96 @@
 """
-Main entry point for the AI Agent application.
+Orchestrator Service - Main Entry Point.
 
-This module exposes a FastAPI application that ingests security scanner findings
-from multiple CI/CD platforms (GitHub, GitLab, Jenkins). It persists findings
-to a database and orchestrates an AI-driven triage and remediation workflow 
-using LangGraph.
+This module is the central coordinator for the Sentinel-AI Security Agent platform.
+It provides a FastAPI-based REST API that:
+
+1. Ingests security scan requests from CI/CD platforms (GitHub, GitLab, Jenkins).
+2. Accepts source code uploads for on-demand security analysis.
+3. Dispatches scan jobs to Celery workers for asynchronous processing.
+4. Orchestrates the AI-powered triage and remediation workflow via LangGraph.
+5. Provides scan status endpoints for monitoring progress.
+
+API Endpoints:
+    POST /scan         - Trigger a scan job for a repository path.
+    POST /triage       - Ingest scan reports and trigger AI triage.
+    POST /scan/upload  - Upload source code ZIP for scanning.
+    GET  /scan/{id}    - Get scan status by ID.
+    GET  /scan_status/{id} - Get detailed scan status with findings count.
+
+Environment Variables:
+    AI_API_KEY          - API key for authenticating requests.
+    DATABASE_URL        - PostgreSQL connection string.
+    ANALYSIS_SERVICE_URL - URL of the Analysis microservice.
+    REMEDIATION_SERVICE_URL - URL of the Remediation microservice.
 """
 
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file (parent directory)
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".env"))
+# Load environment variables from .env file located in the project root
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".env"))
 
 from fastapi import FastAPI, Form, UploadFile, File, Depends, Security, HTTPException, BackgroundTasks
 from fastapi.security.api_key import APIKeyHeader
 from sqlalchemy.orm import Session
 from typing import List, Dict, Optional
 from common.core import database, models
-# from services import parser # Removed
 from common.core.logger import get_logger
-# from services.scanner import SecurityScanner # Removed
 from core.epss_worker import sync_epss_scores
 from workflow import graph
+from tasks import execute_scan_job, execute_triage_job
 import shutil
 import uuid
 import subprocess
 import asyncio
 import traceback
-import asyncio
-import traceback
+import httpx
 from contextlib import contextmanager, asynccontextmanager
 
 logger = get_logger(__name__)
 
 # --- CONFIGURATION ---
+# API key for authenticating incoming requests (defaults to dev key if not set)
 AI_API_KEY = os.getenv("AI_API_KEY", "default-dev-key")
+# Header name where the API key should be provided by clients
 API_KEY_NAME = "X-API-Key"
+# FastAPI security dependency that extracts the key from request headers
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=True)
 
 async def get_api_key(api_key_header: str = Security(api_key_header)):
+    """
+    Validates the API Key provided in the request header.
+
+    Args:
+        api_key_header (str): The API key extracted from the `X-API-Key` header.
+
+    Returns:
+        str: The validated API key if it matches the expected `AI_API_KEY`.
+
+    Raises:
+        HTTPException: If the API key is invalid (403 Forbidden).
+    """
     if api_key_header == AI_API_KEY:
+        logger.debug("API key validated", extra_info={"event": "api_key_validated", "valid": True})
         return api_key_header
+    logger.warning("Invalid API key attempt", extra_info={"event": "api_key_invalid", "valid": False})
     raise HTTPException(status_code=403, detail="Could not validate credentials")
 
 @contextmanager
 def get_db_session():
+    """
+    Context manager for database sessions.
+    Ensures that a session is created and closed properly, even if exceptions occur.
+
+    Yields:
+        sqlalchemy.orm.Session: A database session object.
+    """
+    # Create a new database session from the connection pool
     db = database.SessionLocal()
     try:
         yield db
     finally:
+        # Always close the session to return connection to pool
         db.close()
 
 @asynccontextmanager
@@ -66,27 +107,54 @@ async def lifespan(app: FastAPI):
         logger.info("🛠️ Executing Database Initialization (init_db)...")
         # Run blocking sync code in thread
         await asyncio.to_thread(init_db)
-        logger.info("✅ Database Initialization Complete.")
+        logger.info("✅ Database Initialization Complete.", extra_info={"event": "db_init_success"})
     except Exception as e:
-        logger.critical(f"❌ FATAL: Database Initialization Failed: {e}")
+        logger.critical(f"❌ FATAL: Database Initialization Failed: {e}", extra_info={"event": "db_init_failed", "error": str(e)})
         # We don't raise here to avoid crash loop, but it's critical.
         
     yield
     
     logger.info("🛑 Shutting down Orchestrator Service...")
 
+import threading
+import time
+
+def run_heartbeat():
+    """
+    Background thread that logs a heartbeat event every 30 seconds.
+    Ensures Grafana 'Status' panels remain Green even when the service is idle.
+    """
+    while True:
+        try:
+            # We use extra_info to tag this as a metric event
+            logger.info("Service Heartbeat", extra_info={"event": "heartbeat", "status": "up"})
+            time.sleep(30)
+        except Exception as e:
+            logger.error(f"Heartbeat failed: {e}")
+            time.sleep(30)
+
 app = FastAPI(title="Universal AI Security Agent", lifespan=lifespan)
+
+@app.on_event("startup")
+async def startup_event():
+    # Start the heartbeat daemon thread for Grafana monitoring
+    # This runs in the background and logs status every 30 seconds
+    hb_thread = threading.Thread(target=run_heartbeat, daemon=True)
+    hb_thread.start()
 
 async def ensure_services_ready():
     """
     Checks if Analysis and Remediation services are ready (models loaded).
+    Polls the readiness endpoints of dependent services until they are available or a timeout occurs.
+
+    Returns:
+        bool: True if all services are ready, False otherwise (timeout).
     """
     services = [
         {"name": "Analysis", "url": os.getenv("ANALYSIS_SERVICE_URL", "http://analysis:8000") + "/readiness"},
         {"name": "Remediation", "url": os.getenv("REMEDIATION_SERVICE_URL", "http://remediation:8000") + "/readiness"}
     ]
     
-    import httpx
     logger.info("⏳ Orchestrator: Verifying AI Model Readiness...")
     
     timeout_minutes = 5
@@ -97,240 +165,27 @@ async def ensure_services_ready():
             all_ready = True
             for svc in services:
                 try:
+                    # Ping the readiness endpoint of each service
                     resp = await client.get(svc["url"])
                     if resp.status_code != 200:
                         all_ready = False
-                        # logger.warning(f"Waiting for {svc['name']}... ({resp.status_code})")
                 except:
-                   all_ready = False
+                    # Service unreachable, continue polling
+                    all_ready = False
             
             if all_ready:
-                logger.info("✅ All AI Services are Ready.")
+                logger.info("✅ All AI Services are Ready.", extra_info={"event": "dependencies_ready"})
                 return True
             
+            # Check if we've exceeded the timeout window
             if asyncio.get_event_loop().time() > end_time:
                 logger.error("AI Services Timed Out. Aborting scan.", extra_info={"event": "startup_timeout"})
                 return False
-                
+            
+            # Wait before next polling attempt
             await asyncio.sleep(5)
 
-async def run_brain_background(scan_id, project, sha, findings, token, local_source_path=None):
-    """
-    The core logic for AI triage.
-    """
-    # 0. WAIT FOR MODELS
-    if not await ensure_services_ready():
-         logger.error("Scan aborted due to AI model unavailability.")
-         with get_db_session() as db:
-            db.query(models.Scan).filter(models.Scan.id == scan_id).update({"status": "failed"})
-            db.commit()
-         return
-
-    unique_id = str(uuid.uuid4())[:8]
-    # FIX: Use /tmp/scans/ so it is on the shared volume visible to Sandbox/Scanner
-    temp_src = f"/tmp/scans/brain_scan_{scan_id}_{unique_id}"
-    
-    # Use a variable for the limit so it's easy to change
-    TRIAGE_LIMIT = 20
-    findings_to_process = findings[:TRIAGE_LIMIT]
-
-    repo_url = f"https://x-access-token:{token}@github.com/{project}.git"
-
-    logger.info(f"Starting analysis for {project}", extra_info={"event": "brain_scan_start", "project": project, "sha": sha})
-
-    try:
-        # 1. CLONE & CHECKOUT OR USE LOCAL
-        if local_source_path and os.path.exists(local_source_path):
-             logger.info(f"Using local source path: {local_source_path}", extra_info={"project": project})
-             if os.path.abspath(local_source_path) != os.path.abspath(temp_src):
-                shutil.copytree(local_source_path, temp_src)
-        elif project == "test/live-demo":
-            logger.info("🧪 Demo Mode: Skipping Git Clone. Creating dummy context.")
-            os.makedirs(temp_src, exist_ok=True)
-            with open(os.path.join(temp_src, "app.py"), "w") as f:
-                f.write("import os\n\ndef process_request(user_input):\n    # Vulnerable to Command Injection\n    os.system('echo ' + user_input)\n")
-        else:
-            logger.info(f"twisted_rightwards_arrows Cloning {repo_url}...")
-            await asyncio.to_thread(subprocess.run, ["git", "clone", "--depth", "1", repo_url, temp_src], check=True)
-            await asyncio.to_thread(subprocess.run, ["git", "-C", temp_src, "checkout", sha], check=True)
-
-        # 2. POPULATE SNIPPETS
-        from common.core.utils import populate_snippets
-        await asyncio.to_thread(populate_snippets, findings_to_process, temp_src)
-
-        # 3. PRE-PERSIST with Context Manager
-        with get_db_session() as db:
-            graph_findings = []
-            for f in findings_to_process:
-                db_finding = models.Finding(scan_id=scan_id, **f)
-                db.add(db_finding)
-                db.flush()
-                f["id"] = db_finding.id
-                graph_findings.append(f)
-            db.commit()
-
-        # 4. TRIGGER EXPLOITABILITY SYNC (EPSS)
-        cve_ids = [f["rule_id"] for f in findings if f.get("rule_id", "").startswith("CVE-")]
-        if cve_ids:
-            logger.info(f"📡 Brain: Triggering exploitability sync for {len(cve_ids)} CVEs...")
-            with get_db_session() as db:
-                await asyncio.to_thread(sync_epss_scores, db, cve_ids)
-
-        # 5. TRIGGER WORKFLOW
-        initial_state = {
-            "findings": graph_findings,
-            "current_index": 0,
-            "analyzed_findings": [],
-            "source_path": temp_src, 
-            "project": project,
-            "scan_id": scan_id 
-        }
-
-        final = await graph.graph_app.ainvoke(
-            initial_state, 
-            config={"recursion_limit": 150} 
-        )
-
-        # 6. UPDATE RESULTS
-        with get_db_session() as db:
-            for f in final.get("analyzed_findings", []):
-                if f.get("id"):
-                    db.query(models.Finding).filter(models.Finding.id == f["id"]).update(f)
-            
-            # Update Status to Completed
-            db.query(models.Scan).filter(models.Scan.id == scan_id).update({"status": "completed"})
-            db.commit()
-            logger.info(f"Database: Updated AI results for scan {scan_id}", extra_info={"event": "brain_scan_complete", "scan_id": scan_id, "status": "completed"})
-
-    except Exception as e:
-        logger.error(f"❌ Scan/Triage Failed: {e}")
-        logger.error(traceback.format_exc())
-        with get_db_session() as db:
-            db.query(models.Scan).filter(models.Scan.id == scan_id).update({"status": "failed"})
-            db.commit()
-    finally:
-        if os.path.exists(temp_src):
-            shutil.rmtree(temp_src)
-            logger.info(f"Cleanup: Removed workspace {temp_src}", extra_info={"event": "cleanup", "path": temp_src})
-
-async def perform_scan_background(project: str, path: str, metadata: Dict = None):
-    try:
-        logger.info(f"Starting analysis for {project}", extra_info={"event": "scan_start", "path": path, "project": project})
-        
-        if not metadata: metadata = {}
-        repo_provider = "unknown"
-        ci_provider = metadata.get("ci_provider", "manual-scan")
-        branch = metadata.get("branch", "main")
-        commit_sha = metadata.get("commit_sha", "latest")
-        repo_url = metadata.get("repo_url", "")
-        ci_job_url = metadata.get("run_url", "")
-        
-        if not os.path.exists(path):
-            logger.error(f"❌ Error: Target path does not exist: {path}")
-            return
-
-        # 0. Create Scan Record (EARLY)
-        scan_id = None
-        with get_db_session() as db:
-            try:
-                scan = models.Scan(
-                    project_name=project, 
-                    commit_sha=commit_sha,
-                    source_platform=repo_provider,
-                    repo_provider=repo_provider,
-                    ci_provider=ci_provider,
-                    branch=branch,
-                    repo_url=repo_url,
-                    source_url="localhost",
-                    ci_job_url=ci_job_url,
-                    reference_id=metadata.get("reference_id"),
-                    status="scanning" # [NEW] Set status to scanning immediately
-                )
-                db.add(scan)
-                db.commit()
-                db.refresh(scan)
-                scan_id = scan.id
-                logger.info(f"✅ Created Scan ID {scan_id}: {project} [{branch}] via {ci_provider}")
-            except Exception as e:
-                logger.error(f"DB Error: {e}")
-                return
-
-        # 1. Execute Scanners via HTTP
-        import httpx
-        SCANNER_URL = os.getenv("SCANNER_SERVICE_URL", "http://scanner:8000")
-        
-        try:
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(f"{SCANNER_URL}/scan", json={
-                    "target_path": path,
-                    "project_name": project,
-                    "target_url": None
-                }, timeout=600)
-                resp.raise_for_status()
-                data = resp.json()
-                report_paths = data.get("reports", [])
-                
-            logger.info(f"Scan Complete. Generated {len(report_paths)} reports", extra_info={"event": "scan_complete", "report_count": len(report_paths), "reports": report_paths})
-        except Exception as e:
-            logger.error(f"Scan failed calling service: {e}")
-            logger.error(traceback.format_exc())
-            # Update status to failed
-            with get_db_session() as db:
-                db.query(models.Scan).filter(models.Scan.id == scan_id).update({"status": "failed"})
-                db.commit()
-            return
-
-
-        # 2. Parse Findings (Also via Scanner Service if we want, or locally? 
-        # The plan said Scanner API has /parse. Let's use it.)
-        
-        all_findings = []
-        for report in report_paths:
-             try:
-                # We need to read the report file. 
-                # Since we share volumes, we can read it directly OR ask Scanner to parse it.
-                # If we ask Scanner to parse, we need to upload the file? No, it has the file path.
-                # But Scanner /parse takes UploadFile. 
-                # Let's read it locally since we share the volume '/tmp/scans'.
-                
-                # Wait, if we share volume, we can just use the shared parser code?
-                # But we want to decouple.
-                # Using /parse endpoint implies reading content and sending it.
-                
-                with open(report, "rb") as f:
-                    content = f.read()
-                    
-                async with httpx.AsyncClient() as client:
-                    files = {'file': (os.path.basename(report), content)}
-                    resp = await client.post(f"{SCANNER_URL}/parse", files=files)
-                    if resp.status_code == 200:
-                        findings = resp.json().get("findings", [])
-                        all_findings.extend(findings)
-                    else:
-                         logger.error(f"Failed to parse {report}: {resp.text}")
-
-             except Exception as e:
-                logger.error(f"Failed to parse {report}: {e}")
-
-        # 3. Update Status to Analyzing
-        with get_db_session() as db:
-             db.query(models.Scan).filter(models.Scan.id == scan_id).update({"status": "analyzing"})
-             db.commit()
-
-        logger.info(f"🧩 Parsed {len(all_findings)} total findings. Sending to Brain...")
-        # (Scan ID already created)
-
-
-        await run_brain_background(scan_id, project, commit_sha, all_findings, "no-token", local_source_path=path)
-
-    except Exception as e:
-        logger.error(f"FATAL CRASH in perform_scan: {str(e)}")
-        logger.error(traceback.format_exc())
-    finally:
-        # Cleanup upload dir if applicable
-        if path and "/tmp/scans/uploads/" in path and os.path.exists(path):
-            shutil.rmtree(path)
-            logger.info(f"🗑️ Upload Cleanup: Removed {path}")
+# Logic moved to core/logic.py and tasks.py
 
 # --- HEALTH CHECKS ---
 @app.get("/", include_in_schema=False)
@@ -343,16 +198,19 @@ async def health_check():
 
 # --- API ENDPOINTS ---
 
+# --- SCAN REQUEST MODEL ---
 from pydantic import BaseModel
 class ScanRequest(BaseModel):
-    project_name: str
-    target_path: str = "/app" # Default to current repo
-    # [NEW] Metadata fields for CI/CD Adapters
-    ci_provider: Optional[str] = "manual-scan"
-    branch: Optional[str] = "main"
-    commit_sha: Optional[str] = "latest"
-    repo_url: Optional[str] = None
-    run_url: Optional[str] = None
+    """Request body schema for triggering a security scan."""
+    project_name: str                          # Repository identifier (e.g., "owner/repo")
+    target_path: str = "/app"                  # Path to source code (defaults to container's app dir)
+    # Metadata fields for CI/CD adapter integration
+    ci_provider: Optional[str] = "manual-scan" # CI platform (github-actions, gitlab-ci, jenkins)
+    branch: Optional[str] = "main"             # Git branch being scanned
+    commit_sha: Optional[str] = "latest"       # Git commit hash for tracking
+    repo_url: Optional[str] = None             # Repository URL for cloning
+    run_url: Optional[str] = None              # Link to CI/CD pipeline run
+    changed_files: List[str] = []              # Support for delta/diff-based scanning
 
 @app.post("/scan", status_code=202)
 def trigger_scan_job(
@@ -363,15 +221,35 @@ def trigger_scan_job(
     """
     Triggers a full security scan (Semgrep, Gitleaks, Checkov, Trivy) on the backend.
     """
+    logger.info(f"Scan request received: {req.project_name}", extra_info={
+        "event": "scan_request_received",
+        "project": req.project_name,
+        "ci_provider": req.ci_provider,
+        "branch": req.branch,
+        "commit_sha": req.commit_sha,
+        "has_changed_files": len(req.changed_files) > 0,
+        "changed_files_count": len(req.changed_files)
+    })
+    
+    # Build metadata dict from request fields to pass to the Celery worker
     metadata = {
         "ci_provider": req.ci_provider,
         "branch": req.branch,
         "commit_sha": req.commit_sha,
         "repo_url": req.repo_url,
-        "run_url": req.run_url
+        "run_url": req.run_url,
+        "changed_files": req.changed_files
     }
-    background_tasks.add_task(perform_scan_background, req.project_name, req.target_path, metadata)
-    return {"status": "scanning_started", "project": req.project_name}
+    # Dispatch scan job to Celery worker for async processing
+    # .delay() returns immediately, actual scan runs in background
+    execute_scan_job.delay(req.project_name, req.target_path, metadata)
+    
+    logger.info(f"Scan request accepted: {req.project_name}", extra_info={
+        "event": "scan_request_accepted",
+        "project": req.project_name,
+        "queued": True
+    })
+    return {"status": "scanning_queued", "project": req.project_name}
 
 @app.post("/triage", status_code=202)
 async def ingest(
@@ -385,7 +263,7 @@ async def ingest(
     artifact_size: int = Form(None),
     changed_files: int = Form(None),
     test_coverage: float = Form(None),
-    # New Multi-Platform Args
+    # Multi-Platform CI/CD metadata
     platform: str = Form("github"),
     branch: str = Form("main"),
     instance_url: str = Form(None),
@@ -396,12 +274,20 @@ async def ingest(
     """
     Ingest endpoint for receiving security scan reports.
     """
+    logger.info(f"Ingest request received: {project}", extra_info={
+        "event": "ingest_request_received",
+        "project": project,
+        "sha": sha,
+        "file_count": len(files),
+        "ci_provider": platform
+    })
+    
+    # Parse uploaded scan report files and extract vulnerability findings
     findings = []
-    # Loop through uploaded files and extract valid findings
     for f in files:
         findings.extend(parser.extract_findings(await f.read(), f.filename))
     
-    # create scan record
+    # Create a new Scan record in the database to track this analysis
     scan = models.Scan(
         project_name=project, 
         commit_sha=sha,
@@ -414,7 +300,7 @@ async def ingest(
     )
     db.add(scan); db.commit(); db.refresh(scan)
 
-    # Save Pipeline Metrics if provided
+    # Store pipeline metrics if provided (used for anomaly detection)
     if any(x is not None for x in [build_duration, artifact_size, changed_files, test_coverage]):
         metric = models.PipelineMetric(
             scan_id=scan.id,
@@ -426,9 +312,9 @@ async def ingest(
         db.add(metric)
         db.commit()
     
-    # DISPATCH TO BACKGROUND TASK
-    background_tasks.add_task(run_brain_background, scan.id, project, sha, findings, token)
-    logger.info(f"📥 Received triage request for {project} (SHA: {sha}). Scan ID: {scan.id}")
+    # Dispatch triage job to Celery worker for AI analysis
+    execute_triage_job.delay(scan.id, project, sha, findings, token)
+    logger.info(f"📥 Received triage request for {project} (SHA: {sha}). Scan ID: {scan.id}", extra_info={"event": "triage_queued", "scan_id": scan.id, "project": project, "sha": sha})
     
     return {"status": "queued", "scan_id": scan.id}
 
@@ -444,43 +330,63 @@ async def upload_source_scan(
     ci_provider: str = Form("manual-scan"),
     repo_url: str = Form(""),
     run_url: str = Form(""),
+    target_url: Optional[str] = Form(None),  # For DAST scanning
     file: UploadFile = File(...),
     _api_key: str = Depends(get_api_key)
 ):
     """
     Accepts a source code ZIP, extracts it, and triggers a server-side scan.
     """
+    # Get file size for logging
+    file.file.seek(0, 2)  # Seek to end
+    file_size_mb = file.file.tell() / (1024 * 1024)
+    file.file.seek(0)  # Seek back to start
+    
+    logger.info(f"Source upload received: {project}", extra_info={
+        "event": "source_upload_received",
+        "project": project,
+        "file_size_mb": round(file_size_mb, 2),
+        "ci_provider": ci_provider,
+        "branch": branch,
+        "commit_sha": commit_sha
+    })
+    
+    # Generate a unique ID for this upload to create isolated directory
     scan_id = str(uuid.uuid4())[:8]
     upload_dir = f"/tmp/scans/uploads/{scan_id}_{project.replace('/', '_')}"
     os.makedirs(upload_dir, exist_ok=True)
     
     zip_path = f"{upload_dir}/source.zip"
     
-    # 1. Save Zip
+    # Step 1: Save the uploaded ZIP file to disk
     with open(zip_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
         
-    # 2. Extract
+    # Step 2: Extract ZIP contents and remove the archive
     try:
         with zipfile.ZipFile(zip_path, 'r') as zip_ref:
             zip_ref.extractall(upload_dir)
-        os.remove(zip_path)
+        os.remove(zip_path)  # Clean up ZIP after extraction
     except zipfile.BadZipFile:
         raise HTTPException(status_code=400, detail="Invalid ZIP file")
         
-    # 3. Trigger Scan Task
+    # Step 3: Prepare metadata and dispatch scan job to Celery
     metadata = {
         "commit_sha": commit_sha,
         "ci_provider": ci_provider,
         "repo_url": repo_url,
         "run_url": run_url,
         "branch": branch,
-        "reference_id": scan_id # Pass the UUID to be stored
+        "target_url": target_url,        # URL for DAST scanning if provided
+        "reference_id": scan_id           # UUID for async status tracking
     }
     
-    background_tasks.add_task(perform_scan_background, project, upload_dir, metadata)
+    # Placeholder to maintain API compatibility
+    background_tasks.add_task(lambda: None)
+    # Dispatch scan job with extracted source directory
+    execute_scan_job.delay(project, upload_dir, metadata)
     
-    logger.info(f"📤 Upload received for {project}. Extracted to {upload_dir}.")
+    logger.info(f"📤 Upload received for {project}. Extracted to {upload_dir}.", extra_info={"event": "source_upload", "project": project, "upload_dir": upload_dir, "scan_id": scan_id})
 
     return {
         "status": "uploaded", 

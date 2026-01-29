@@ -7,3 +7,7 @@ langchain-openai
 langchain-core
 semgrep
 python-multipart
+redis
+
+
+hvac>=2.1.0

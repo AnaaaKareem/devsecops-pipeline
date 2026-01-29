@@ -5,3 +5,7 @@ python-dotenv
 langchain-openai
 langchain-core
 PyGithub
+redis
+
+
+hvac>=2.1.0

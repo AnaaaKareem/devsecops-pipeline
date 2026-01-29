@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nexus Security Dashboard</title>
+    <meta name="description" content="Real-time security vulnerability dashboard with AI-powered analysis">
+    
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Custom Styles -->
+    <link rel="stylesheet" href="/static/css/styles.css">
+    
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    
+    <style>
+        /* Override font-family to use Inter */
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'Segoe UI', Roboto, sans-serif;
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-content">
+            <div class="navbar-brand">
+                <span style="font-size: 1.5rem;">🛡️</span>
+                <span class="navbar-logo">Nexus Security</span>
+            </div>
+            <div class="navbar-controls">
+                <button class="nav-btn" onclick="scrollCarousel(-1)" title="Previous">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+                    </svg>
+                </button>
+                <button class="nav-btn" onclick="scrollCarousel(1)" title="Next">
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                    </svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="main-container">
+        
+        <!-- Project Carousel -->
+        <section class="carousel-container">
+            <div class="section-header">
+                <h2 class="section-title">
+                    <span class="section-title-icon">📁</span>
+                    <span class="section-title-text">Projects</span>
+                </h2>
+            </div>
+            <div class="carousel-scroll" id="projectCarousel">
+                <!-- Populated by JavaScript -->
+                <div class="skeleton" style="width: 280px; height: 130px; border-radius: 20px;"></div>
+                <div class="skeleton" style="width: 280px; height: 130px; border-radius: 20px;"></div>
+                <div class="skeleton" style="width: 280px; height: 130px; border-radius: 20px;"></div>
+            </div>
+        </section>
+
+        <!-- Stats Grid -->
+        <section class="stats-grid">
+            <div class="stat-card glass-card critical">
+                <div class="stat-icon">⚠️</div>
+                <div class="stat-label">Critical Issues</div>
+                <div class="stat-value" id="statCritical">-</div>
+                <div class="stat-subtitle">Requires immediate action</div>
+            </div>
+            
+            <div class="stat-card glass-card high">
+                <div class="stat-icon">🔴</div>
+                <div class="stat-label">High Severity</div>
+                <div class="stat-value" id="statHigh">-</div>
+                <div class="stat-subtitle">Elevated risk level</div>
+            </div>
+            
+            <div class="stat-card glass-card success">
+                <div class="stat-icon">🤖</div>
+                <div class="stat-label">AI Fixes Available</div>
+                <div class="stat-value" id="statAiFixes">-</div>
+                <div class="stat-subtitle">Ready to apply</div>
+            </div>
+            
+            <div class="stat-card glass-card info">
+                <div class="stat-icon">✅</div>
+                <div class="stat-label">True Positives</div>
+                <div class="stat-value" id="statTruePositives">-</div>
+                <div class="stat-subtitle">AI-confirmed issues</div>
+            </div>
+            
+            <div class="stat-card glass-card accent">
+                <div class="stat-icon">📊</div>
+                <div class="stat-label">Total Findings</div>
+                <div class="stat-value" id="statTotalFindings">-</div>
+                <div class="stat-subtitle">Across all scans</div>
+            </div>
+            
+            <div class="stat-card glass-card info">
+                <div class="stat-icon">📁</div>
+                <div class="stat-label">Repositories</div>
+                <div class="stat-value" id="statRepos">-</div>
+                <div class="stat-subtitle">Connected projects</div>
+            </div>
+        </section>
+
+        <!-- Charts Section -->
+        <section class="charts-grid" style="grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));">
+            <!-- Vulnerability Trend (Global) / Severity (Repo) -->
+            <div class="chart-card glass-card">
+                <h3 class="chart-title">Vulnerability Trend</h3>
+                <div class="chart-container">
+                    <canvas id="riskChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- Tool Distribution -->
+            <div class="chart-card glass-card" id="toolChartCard">
+                <h3 class="chart-title">Findings by Tool</h3>
+                <div class="chart-container">
+                    <canvas id="toolChart"></canvas>
+                </div>
+            </div>
+
+            <!-- AI Fix Rate -->
+            <div class="chart-card glass-card">
+                <h3 class="chart-title">AI Fix Rate</h3>
+                <div class="chart-container">
+                    <canvas id="aiFixChart"></canvas>
+                </div>
+            </div>
+            
+            <!-- CI Provider (Hidden in Repo View) -->
+            <div class="chart-card glass-card" id="ciChartContainer">
+                <h3 class="chart-title">CI Provider Distribution</h3>
+                <div class="chart-container">
+                    <canvas id="ciChart"></canvas>
+                </div>
+            </div>
+        </section>
+
+        <!-- Security Findings Table -->
+        <section class="findings-container glass-card" style="padding: 1.5rem;">
+            <div class="findings-header">
+                <h2 class="section-title">
+                    <span class="section-title-icon">🔐</span>
+                    <span class="section-title-text">Security Findings</span>
+                </h2>
+                <span class="findings-count" id="findingsCount">Loading...</span>
+            </div>
+            
+            <!-- Filters -->
+            <div class="findings-filters mb-3">
+                <select id="filterRepo" class="filter-select" onchange="applyFilters()">
+                    <option value="">All Repositories</option>
+                </select>
+                <select id="filterTool" class="filter-select" onchange="applyFilters()">
+                    <option value="">All Tools</option>
+                </select>
+                <select id="filterSeverity" class="filter-select" onchange="applyFilters()">
+                    <option value="">All Severities</option>
+                </select>
+            </div>
+            
+            <!-- Table -->
+            <div class="findings-table-wrapper">
+                <table class="findings-table">
+                    <thead>
+                        <tr>
+                            <th>Severity</th>
+                            <th>Tool</th>
+                            <th>Location</th>
+                            <th>Project</th>
+                            <th>Risk</th>
+                            <th>AI Fix</th>
+                            <th>View</th>
+                        </tr>
+                    </thead>
+                    <tbody id="findingsBody">
+                        <tr>
+                            <td colspan="7" class="text-center" style="padding: 2rem; color: var(--text-muted);">
+                                <div class="skeleton" style="height: 200px;"></div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+            
+            <!-- Pagination -->
+            <div class="pagination">
+                <button class="page-btn" id="prevPage" onclick="changePage(-1)" disabled>← Previous</button>
+                <span class="page-info" id="pageInfo">Page 1 of 1</span>
+                <button class="page-btn" id="nextPage" onclick="changePage(1)">Next →</button>
+            </div>
+        </section>
+    </main>
+
+    <!-- AI Fix Modal -->
+    <div class="modal-overlay" id="findingModal">
+        <div class="modal-content glass-card" id="modalContent">
+            <!-- Content populated by JavaScript -->
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay" id="deleteModal">
+        <div class="modal-content glass-card delete-modal-content">
+            <div class="delete-icon">⚠️</div>
+            <h3 class="delete-title">Confirm Deletion</h3>
+            <p class="delete-message">
+                Are you sure you want to delete <span class="delete-repo-name" id="deleteRepoName"></span>?
+            </p>
+            <p class="delete-warning">⚠️ This action is irreversible. All scans, findings, and logs will be permanently removed.</p>
+            <div class="delete-actions">
+                <button class="delete-btn-cancel" onclick="cancelDelete()">Cancel</button>
+                <button class="delete-btn-confirm" id="deleteConfirmBtn" onclick="executeDelete()">Delete Project</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Close modal on overlay click -->
+    <script>
+        document.getElementById('findingModal').addEventListener('click', function(e) {
+            if (e.target === this) closeModal();
+        });
+        document.getElementById('deleteModal').addEventListener('click', function(e) {
+            if (e.target === this) cancelDelete();
+        });
+    </script>
+
+    <!-- Application JavaScript -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

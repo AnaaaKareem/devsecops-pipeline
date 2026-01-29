@@ -1,0 +1,91 @@
+pipeline {
+    agent any
+
+    environment {
+        // These should be configured in Jenkins Credentials
+        AI_API_KEY = credentials('AI_API_KEY')
+        AI_URL = "http://ai-agent.local:8000" // Replace with actual AI Agent URL
+        PROJECT_NAME = "DevSecOps-Project"
+    }
+
+    stages {
+        stage('Build') {
+            steps {
+                echo 'Building...'
+                // Add build commands here
+            }
+        }
+
+        stage('Security Gate') {
+            steps {
+                script {
+                    echo '🚀 Preparing source code for AI Agent...'
+                    sh "zip -r source_code.zip . -x '.git/*'"
+
+                    echo '📤 Uploading to AI Agent...'
+                    def response = sh(script: """
+                        curl -s -X POST ${AI_URL}/scan/upload \
+                        -H "X-API-Key: ${AI_API_KEY}" \
+                        -F "project=${PROJECT_NAME}" \
+                        -F "branch=${BRANCH_NAME}" \
+                        -F "commit_sha=${GIT_COMMIT}" \
+                        -F "ci_provider=Jenkins" \
+                        -F "repo_url=${GIT_URL}" \
+                        -F "run_url=${BUILD_URL}" \
+                        -F "file=@source_code.zip"
+                    """, returnStdout: true).trim()
+
+                    echo "Response: ${response}"
+                    def scanId = sh(script: "echo '${response}' | jq -r '.scan_id'", returnStdout: true).trim()
+                    
+                    if (scanId == "null" || !scanId) {
+                        error "Failed to get Scan ID from AI Agent"
+                    }
+                    
+                    echo "Scan ID: ${scanId}"
+
+                    echo '⏳ Polling status...'
+                    def status = "pending"
+                    while (status != "completed") {
+                        def statusResponse = sh(script: """
+                            curl -s -X GET ${AI_URL}/scan_status/${scanId} \
+                            -H "X-API-Key: ${AI_API_KEY}"
+                        """, returnStdout: true).trim()
+                        
+                        status = sh(script: "echo '${statusResponse}' | jq -r '.status'", returnStdout: true).trim()
+                        echo "Current Status: ${status}"
+
+                        if (status == "failed" || status == "timeout") {
+                            error "❌ Security scan ${status}!"
+                        }
+
+                        if (status != "completed") {
+                            sleep 10
+                        }
+                    }
+
+                    def riskScore = sh(script: "echo '${response}' | jq -r '.risk_score'", returnStdout: true).trim()
+                    echo "Final Risk Score: ${riskScore}"
+                    echo '✅ Security Gate Passed.'
+                }
+            }
+        }
+
+        stage('Deploy') {
+            when {
+                branch 'main'
+            }
+            steps {
+                echo '🚀 Deploying to Production...'
+                // Add deployment commands here
+            }
+        }
+    }
+
+    post {
+        always {
+            // Cleanup
+            sh "rm -f source_code.zip"
+        }
+    }
+}

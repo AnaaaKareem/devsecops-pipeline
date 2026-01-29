@@ -1,0 +1,1436 @@
+{
+    "annotations": {
+        "list": [
+            {
+                "builtIn": 1,
+                "datasource": {
+                    "type": "grafana",
+                    "uid": "-- Grafana --"
+                },
+                "enable": true,
+                "hide": true,
+                "iconColor": "rgba(0, 211, 255, 1)",
+                "name": "Annotations & Alerts",
+                "type": "dashboard"
+            }
+        ]
+    },
+    "editable": true,
+    "fiscalYearStartMonth": 0,
+    "graphTooltip": 1,
+    "id": null,
+    "links": [],
+    "liveNow": true,
+    "panels": [
+        {
+            "gridPos": {
+                "h": 2,
+                "w": 24,
+                "x": 0,
+                "y": 0
+            },
+            "id": 1,
+            "options": {
+                "mode": "markdown",
+                "content": "# 🛡️ Nexus Security - Microservices Monitor\nReal-time infrastructure monitoring | Hardware usage • Service status • Categorized logs"
+            },
+            "title": "",
+            "type": "text"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 2
+            },
+            "id": 100,
+            "panels": [],
+            "title": "🟢 Service Health Status",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 0,
+                "y": 3
+            },
+            "id": 2,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*orchestrator.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "🎯 Orchestrator",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 3,
+                "y": 3
+            },
+            "id": 3,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*scanner.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "🔍 Scanner",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 6,
+                "y": 3
+            },
+            "id": 4,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*analysis.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "🧠 Analysis",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 9,
+                "y": 3
+            },
+            "id": 5,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*remediation.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "🔧 Remediation",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 12,
+                "y": 3
+            },
+            "id": 6,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*sandbox.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "🧪 Sandbox",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 15,
+                "y": 3
+            },
+            "id": 7,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*dashboard.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "📊 Dashboard",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 18,
+                "y": 3
+            },
+            "id": 8,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*db.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "🗄️ Database",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "mappings": [
+                        {
+                            "options": {
+                                "0": {
+                                    "color": "red",
+                                    "index": 1,
+                                    "text": "OFFLINE"
+                                },
+                                "1": {
+                                    "color": "green",
+                                    "index": 0,
+                                    "text": "RUNNING"
+                                }
+                            },
+                            "type": "value"
+                        }
+                    ],
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    }
+                }
+            },
+            "gridPos": {
+                "h": 3,
+                "w": 3,
+                "x": 21,
+                "y": 3
+            },
+            "id": 9,
+            "options": {
+                "colorMode": "background",
+                "graphMode": "none",
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "count(time() - container_last_seen{name=~\".*redis.*\"} < 60) OR vector(0)",
+                    "refId": "A"
+                }
+            ],
+            "title": "📦 Redis",
+            "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 6
+            },
+            "id": 101,
+            "panels": [],
+            "title": "💻 Hardware Usage",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 50
+                            },
+                            {
+                                "color": "red",
+                                "value": 80
+                            }
+                        ]
+                    },
+                    "unit": "percent",
+                    "min": 0,
+                    "max": 100
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 24,
+                "x": 0,
+                "y": 7
+            },
+            "id": 20,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "showUnfilled": true,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "avg(rate(container_cpu_usage_seconds_total{name=~\"devsecops.*\"}[1m])) by (name) * 100",
+                    "legendFormat": "{{name}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "🔥 CPU Usage by Service",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 536870912
+                            },
+                            {
+                                "color": "red",
+                                "value": 1073741824
+                            }
+                        ]
+                    },
+                    "unit": "bytes"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 12,
+                "x": 0,
+                "y": 13
+            },
+            "id": 21,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "showUnfilled": true,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "container_memory_usage_bytes{name=~\"devsecops.*\"}",
+                    "legendFormat": "{{name}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "🧠 Memory Usage by Service",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 1,
+                        "fillOpacity": 20
+                    },
+                    "unit": "Bps"
+                }
+            },
+            "gridPos": {
+                "h": 6,
+                "w": 12,
+                "x": 12,
+                "y": 13
+            },
+            "id": 22,
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "rate(container_network_receive_bytes_total{name=~\"devsecops.*\"}[1m])",
+                    "legendFormat": "{{name}} - RX",
+                    "refId": "A"
+                },
+                {
+                    "expr": "rate(container_network_transmit_bytes_total{name=~\"devsecops.*\"}[1m])",
+                    "legendFormat": "{{name}} - TX",
+                    "refId": "B"
+                }
+            ],
+            "title": "🌐 Network I/O",
+            "type": "timeseries"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 19
+            },
+            "id": 102,
+            "panels": [],
+            "title": "📊 Service Activity",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 0,
+                "y": 20
+            },
+            "id": 30,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(count_over_time({service=\"orchestrator\"}[$__range]))",
+                    "refId": "A"
+                }
+            ],
+            "title": "Orchestrator Logs",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 4,
+                "y": 20
+            },
+            "id": 31,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(count_over_time({service=\"scanner\"}[$__range]))",
+                    "refId": "A"
+                }
+            ],
+            "title": "Scanner Logs",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 8,
+                "y": 20
+            },
+            "id": 32,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(count_over_time({service=\"analysis\"}[$__range]))",
+                    "refId": "A"
+                }
+            ],
+            "title": "Analysis Logs",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 12,
+                "y": 20
+            },
+            "id": 33,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(count_over_time({service=\"remediation\"}[$__range]))",
+                    "refId": "A"
+                }
+            ],
+            "title": "Remediation Logs",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 16,
+                "y": 20
+            },
+            "id": 34,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(count_over_time({service=\"sandbox\"}[$__range]))",
+                    "refId": "A"
+                }
+            ],
+            "title": "Sandbox Logs",
+            "type": "stat"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "red",
+                                "value": null
+                            },
+                            {
+                                "color": "green",
+                                "value": 1
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 4,
+                "w": 4,
+                "x": 20,
+                "y": 20
+            },
+            "id": 35,
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area",
+                "reduceOptions": {
+                    "calcs": [
+                        "sum"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(count_over_time({service=\"dashboard\"}[$__range]))",
+                    "refId": "A"
+                }
+            ],
+            "title": "Dashboard Logs",
+            "type": "stat"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 24
+            },
+            "id": 103,
+            "panels": [],
+            "title": "🔴 Error Logs",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 25
+            },
+            "id": 40,
+            "options": {
+                "showTime": true,
+                "showLabels": true,
+                "wrapLogMessage": true,
+                "sortOrder": "Descending",
+                "enableLogDetails": true,
+                "dedupStrategy": "none"
+            },
+            "targets": [
+                {
+                    "expr": "{job=\"app-logs\"} |= \"ERROR\"",
+                    "refId": "A"
+                }
+            ],
+            "title": "🔴 Error Logs (All Services)",
+            "type": "logs"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 33
+            },
+            "id": 104,
+            "panels": [],
+            "title": "🟡 Warning Logs",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 34
+            },
+            "id": 41,
+            "options": {
+                "showTime": true,
+                "showLabels": true,
+                "wrapLogMessage": true,
+                "sortOrder": "Descending",
+                "enableLogDetails": true,
+                "dedupStrategy": "none"
+            },
+            "targets": [
+                {
+                    "expr": "{job=\"app-logs\"} |= \"WARNING\"",
+                    "refId": "A"
+                }
+            ],
+            "title": "🟡 Warning Logs (All Services)",
+            "type": "logs"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 42
+            },
+            "id": 105,
+            "panels": [],
+            "title": "🔵 Info Logs",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "gridPos": {
+                "h": 8,
+                "w": 24,
+                "x": 0,
+                "y": 43
+            },
+            "id": 42,
+            "options": {
+                "showTime": true,
+                "showLabels": true,
+                "wrapLogMessage": true,
+                "sortOrder": "Descending",
+                "enableLogDetails": true,
+                "dedupStrategy": "none"
+            },
+            "targets": [
+                {
+                    "expr": "{job=\"app-logs\"} |= \"INFO\" |!= \"ERROR\" |!= \"WARNING\"",
+                    "refId": "A"
+                }
+            ],
+            "title": "🔵 Info Logs (All Services)",
+            "type": "logs"
+        },
+        {
+            "collapsed": false,
+            "gridPos": {
+                "h": 1,
+                "w": 24,
+                "x": 0,
+                "y": 51
+            },
+            "id": 106,
+            "panels": [],
+            "title": "📈 Additional Metrics",
+            "type": "row"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "mode": "absolute",
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            },
+                            {
+                                "color": "yellow",
+                                "value": 1
+                            },
+                            {
+                                "color": "red",
+                                "value": 3
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 5,
+                "w": 8,
+                "x": 0,
+                "y": 52
+            },
+            "id": 50,
+            "options": {
+                "orientation": "horizontal",
+                "displayMode": "gradient",
+                "showUnfilled": true,
+                "reduceOptions": {
+                    "calcs": [
+                        "lastNotNull"
+                    ],
+                    "fields": "",
+                    "values": false
+                }
+            },
+            "targets": [
+                {
+                    "expr": "changes(container_start_time_seconds{name=~\"devsecops.*\"}[1h])",
+                    "legendFormat": "{{name}}",
+                    "refId": "A"
+                }
+            ],
+            "title": "🔄 Container Restarts (Last Hour)",
+            "type": "bargauge"
+        },
+        {
+            "datasource": {
+                "type": "loki",
+                "uid": "Loki"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 2,
+                        "fillOpacity": 20
+                    },
+                    "unit": "short"
+                }
+            },
+            "gridPos": {
+                "h": 5,
+                "w": 8,
+                "x": 8,
+                "y": 52
+            },
+            "id": 51,
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "sum(count_over_time({job=\"app-logs\"} |= \"ERROR\"[$__interval]))",
+                    "legendFormat": "Errors",
+                    "refId": "A"
+                },
+                {
+                    "expr": "sum(count_over_time({job=\"app-logs\"} |= \"WARNING\"[$__interval]))",
+                    "legendFormat": "Warnings",
+                    "refId": "B"
+                },
+                {
+                    "expr": "sum(count_over_time({job=\"app-logs\"} |= \"INFO\"[$__interval]))",
+                    "legendFormat": "Info",
+                    "refId": "C"
+                }
+            ],
+            "title": "📊 Log Volume Over Time",
+            "type": "timeseries"
+        },
+        {
+            "datasource": {
+                "type": "prometheus",
+                "uid": "Prometheus"
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "lineWidth": 1,
+                        "fillOpacity": 10
+                    },
+                    "unit": "Bps"
+                }
+            },
+            "gridPos": {
+                "h": 5,
+                "w": 8,
+                "x": 16,
+                "y": 52
+            },
+            "id": 52,
+            "options": {
+                "legend": {
+                    "displayMode": "list",
+                    "placement": "bottom"
+                }
+            },
+            "targets": [
+                {
+                    "expr": "rate(container_fs_reads_bytes_total{name=~\"devsecops.*\"}[1m])",
+                    "legendFormat": "{{name}} - Read",
+                    "refId": "A"
+                },
+                {
+                    "expr": "rate(container_fs_writes_bytes_total{name=~\"devsecops.*\"}[1m])",
+                    "legendFormat": "{{name}} - Write",
+                    "refId": "B"
+                }
+            ],
+            "title": "💾 Disk I/O",
+            "type": "timeseries"
+        }
+    ],
+    "refresh": "5s",
+    "schemaVersion": 38,
+    "style": "dark",
+    "tags": [
+        "nexus-security",
+        "microservices",
+        "monitoring"
+    ],
+    "templating": {
+        "list": []
+    },
+    "time": {
+        "from": "now-5m",
+        "to": "now"
+    },
+    "timepicker": {
+        "refresh_intervals": [
+            "5s",
+            "10s",
+            "30s",
+            "1m",
+            "5m"
+        ]
+    },
+    "timezone": "browser",
+    "title": "Nexus Security - Microservices Monitor",
+    "uid": "nexus-microservices",
+    "version": 1
+}

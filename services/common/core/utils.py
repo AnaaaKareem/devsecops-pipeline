@@ -1,3 +1,7 @@
+"""
+Common Utility Functions.
+"""
+
 import os
 
 def populate_snippets(findings: list, source_root: str):
@@ -9,9 +13,10 @@ def populate_snippets(findings: list, source_root: str):
         source_root (str): The root directory where the repo is checked out.
     """
     for f in findings:
-        # Initialize snippet as None or a clear message to avoid KeyErrors later
+        # Default snippet in case file is not found
         f["snippet"] = "⚠️ Source code not found on local Fedora disk."
         
+        # Build absolute path from source root and relative file path
         path = os.path.join(source_root, f["file"])
         
         if os.path.exists(path):
@@ -23,10 +28,10 @@ def populate_snippets(findings: list, source_root: str):
                         f["snippet"] = "⚠️ File is empty."
                         continue
 
-                    # SARIF/Gitleaks lines are 1-based; Python is 0-based
+                    # Convert 1-based line number (from SARIF) to 0-based index
                     actual_line = int(f.get("line", 1)) - 1 
                     
-                    # Extract context (5 lines before and after)
+                    # Extract context: 5 lines before and after the finding
                     start = max(0, actual_line - 5)
                     end = min(len(lines), actual_line + 5)
                     

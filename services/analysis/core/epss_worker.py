@@ -1,3 +1,8 @@
+"""
+EPSS Worker (Analysis Service).
+
+Provides utility functions to sync Exploit Prediction Scoring System data.
+"""
 
 import requests
 import logging
@@ -8,11 +13,16 @@ from common.core import models, database
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("EPSSWorker")
 
+# FIRST.org EPSS API endpoint for exploit prediction scores
 EPSS_API = "https://api.first.org/data/v1/epss"
 
 def sync_epss_scores(db: Session, cve_ids: list):
     """
     Fetches and persists real-world exploit probability for findings.
+
+    Args:
+        db (Session): Database session.
+        cve_ids (list): List of CVE IDs.
     """
     if not cve_ids:
         logger.info("No CVEs to sync.")
@@ -20,8 +30,7 @@ def sync_epss_scores(db: Session, cve_ids: list):
     
     logger.info(f"🔄 Syncing EPSS scores for {len(cve_ids)} CVEs...")
     
-    # FIRST.org API supports comma-separated CVEs
-    # Note: Large lists might need batching, but we'll assume manageable batches for now.
+    # FIRST.org API accepts comma-separated CVE IDs in a single request
     params = {"cve": ",".join(cve_ids)}
     
     try:
@@ -31,14 +40,14 @@ def sync_epss_scores(db: Session, cve_ids: list):
             data = response.json().get("data", [])
             logger.info(f"✅ Received {len(data)} EPSS records.")
             
+            # Upsert each EPSS record into the database
             for entry in data:
-                # Upsert into epss_data table
                 epss_record = models.EPSSData(
                     cve_id=entry["cve"],
-                    probability=float(entry.get("epss", 0.0)),
-                    percentile=float(entry.get("percentile", 0.0))
+                    probability=float(entry.get("epss", 0.0)),      # Probability of exploit
+                    percentile=float(entry.get("percentile", 0.0))  # Relative ranking
                 )
-                db.merge(epss_record)
+                db.merge(epss_record)  # Upsert (insert or update)
             
             db.commit()
             logger.info("💾 EPSS Data Saved to DB.")

@@ -16,35 +16,34 @@ class Scan(Base):
     """
     __tablename__ = "scans"
     
+    # --- Primary Key & Identifiers ---
     id = Column(Integer, primary_key=True, index=True)
-    project_name = Column(String, index=True) # e.g. "user/repo"
-    commit_sha = Column(String, index=True)   # The Git commit hash scanned
-    commit_sha = Column(String, index=True)   # The Git commit hash scanned
+    project_name = Column(String, index=True)       # e.g. "user/repo"
+    commit_sha = Column(String, index=True)         # Git commit hash scanned
+    commit_sha = Column(String, index=True)         # Git commit hash scanned
     timestamp = Column(DateTime, default=datetime.utcnow)
-    reference_id = Column(String, index=True, nullable=True) # [NEW] UUID for async status tracking
+    reference_id = Column(String, index=True, nullable=True)  # UUID for async status tracking
     
-    # Relationship to findings (One Scan -> Many Findings)
-    findings = relationship("Finding", back_populates="scan")
-    
-    # Move this inside the class
+    # --- Relationships ---
+    findings = relationship("Finding", back_populates="scan")  # One-to-many
     metrics = relationship("PipelineMetric", back_populates="scan", uselist=False, cascade="all, delete-orphan")
     
-    # --- MULTI-PLATFORM SUPPORT ---
-    source_platform = Column(String, default="github") # github, gitlab, jenkins, azure, bitbucket
-    repo_provider = Column(String) # [NEW] github, gitlab, jenkins
-    repo_url = Column(String)      # [NEW] Full URL
-    ci_provider = Column(String)   # [NEW] github-actions, gitlab-ci, jenkins
-    branch = Column(String)        # [NEW] Branch name
+    # --- Multi-Platform Support ---
+    source_platform = Column(String, default="github")  # github, gitlab, jenkins, azure
+    repo_provider = Column(String)                      # github, gitlab, jenkins
+    repo_url = Column(String)                           # Full repository URL
+    ci_provider = Column(String)                        # github-actions, gitlab-ci, jenkins
+    branch = Column(String)                             # Branch name being scanned
     
-    source_url = Column(String, nullable=True)         # Base URL for Enterprise/Self-Hosted
-    target_url = Column(String, nullable=True)         # [NEW] The URL of the temporary test environment
-    ci_job_url = Column(String, nullable=True)         # Link to the CI run log
-    status = Column(String, default="pending")         # [NEW] pending, processing, completed, failed
+    # --- URLs & Status ---
+    source_url = Column(String, nullable=True)          # Base URL for Enterprise/Self-Hosted
+    target_url = Column(String, nullable=True)          # Temporary test environment URL (DAST)
+    ci_job_url = Column(String, nullable=True)          # Link to CI run log
+    status = Column(String, default="pending")          # pending, processing, completed, failed
 
 class Finding(Base):
     """
     Represents a single security vulnerability/finding detected by a scanner tool.
-    
     Stores both the original scanner data and the AI's subsequent analysis.
     """
     __tablename__ = "findings"
@@ -52,40 +51,40 @@ class Finding(Base):
     id = Column(Integer, primary_key=True, index=True)
     scan_id = Column(Integer, ForeignKey("scans.id"))
     
-    # [NEW] Time to Resolution Tracking
+    # --- Time Tracking ---
     created_at = Column(DateTime, default=datetime.utcnow)
-    resolved_at = Column(DateTime, nullable=True)
+    resolved_at = Column(DateTime, nullable=True)       # Set when finding is fixed
     
-    triage_decision = Column(String) # e.g., "TP" (True Positive) or "FP" (False Positive)
-    sandbox_logs = Column(Text)      # Execution logs from the verification sandbox
+    triage_decision = Column(String)      # "TP" (True Positive) or "FP" (False Positive)
+    sandbox_logs = Column(Text)           # Execution logs from verification sandbox
     
-    # --- SYNCHRONIZED FIELDS ---
-    tool = Column(String)        # Name of the tool (Semgrep, Gitleaks, etc.)
-    rule_id = Column(String)     # The specific rule violated
-    file = Column(String)        # File path relative to repo root
-    dast_endpoint = Column(String, nullable=True) # [NEW] URL/Endpoint for DAST findings
-    line = Column(Integer)       # Line number of the finding
-    message = Column(Text)       # Original description from the scanner
+    # --- Scanner Output Fields ---
+    tool = Column(String)                 # Scanner name (Semgrep, Gitleaks, etc.)
+    rule_id = Column(String)              # Specific rule violated
+    file = Column(String)                 # File path relative to repo root
+    dast_endpoint = Column(String, nullable=True)  # URL/Endpoint for DAST findings
+    line = Column(Integer)                # Line number of the finding
+    message = Column(Text)                # Original description from scanner
     
-    # --- AI & REMEDIATION FIELDS ---
-    snippet = Column(Text)            # Code snippet extracted from source
-    ai_verdict = Column(String)       # "TP" or "FP" determined by LLM
-    ai_confidence = Column(Float, default=0.0) # [NEW] Confidence score (0.0 - 1.0)
-    ai_reasoning = Column(Text)       # LLM's explanation - unused currently
-    risk_score = Column(Float)        # Numeric risk assessment (1.0 - 10.0)
-    severity = Column(String)         # "Critical", "High", "Medium", "Low"
-    remediation_patch = Column(Text)  # The code fix generated by the AI
+    # --- AI Analysis Fields ---
+    snippet = Column(Text)                # Code snippet extracted from source
+    ai_verdict = Column(String)           # "TP" or "FP" from LLM analysis
+    ai_confidence = Column(Float, default=0.0)  # Confidence score (0.0 - 1.0)
+    ai_reasoning = Column(Text)           # LLM's explanation
+    risk_score = Column(Float)            # Numeric risk (1.0 - 10.0)
+    severity = Column(String)             # "Critical", "High", "Medium", "Low"
+    remediation_patch = Column(Text)      # AI-generated code fix
     
-    # --- AGENTIC OUTCOMES ---
-    red_team_success = Column(Boolean, default=False) # Did the active exploit work?
-    red_team_output = Column(Text)                    # Output from the exploit attempt
-    pr_url = Column(String)                           # URL of the created Pull Request
-    pr_error = Column(String)                         # Error message if PR creation failed
+    # --- Agentic Workflow Outcomes ---
+    red_team_success = Column(Boolean, default=False)  # Did exploit verification succeed?
+    red_team_output = Column(Text)                     # Exploit attempt output
+    pr_url = Column(String)                            # URL of created Pull Request
+    pr_error = Column(String)                          # Error if PR creation failed
     
-    # [NEW] Production Readiness Fields
-    regression_test_passed = Column(Boolean, default=None)     # Did the fix break existing functionality?
-    is_exported_for_training = Column(Boolean, default=False)  # Has this been used for RLHF?
-    compliance_control = Column(String, nullable=True)         # Mapped via RAG (e.g. "SOC2-CC7.1")
+    # --- Production Readiness ---
+    regression_test_passed = Column(Boolean, default=None)     # Did fix break tests?
+    is_exported_for_training = Column(Boolean, default=False)  # Used for RLHF?
+    compliance_control = Column(String, nullable=True)         # e.g. "SOC2-CC7.1"
 
     # Relationships
     scan = relationship("Scan", back_populates="findings")

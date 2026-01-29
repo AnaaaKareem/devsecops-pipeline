@@ -1,3 +1,9 @@
+"""
+EPSS (Exploit Prediction Scoring System) Worker.
+
+This module handles fetching and synchronizing EPSS scores from the FIRST.org API.
+It updates the database with the latest probability and percentile data for identified CVEs.
+"""
 
 import requests
 import logging
@@ -13,6 +19,10 @@ EPSS_API = "https://api.first.org/data/v1/epss"
 def sync_epss_scores(db: Session, cve_ids: list):
     """
     Fetches and persists real-world exploit probability for findings.
+
+    Args:
+        db (Session): The database session.
+        cve_ids (list): A list of CVE IDs (strings) to query.
     """
     if not cve_ids:
         logger.info("No CVEs to sync.")

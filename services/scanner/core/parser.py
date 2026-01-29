@@ -1,29 +1,33 @@
 """
-Parser service for extracting findings from security scan reports.
+Parser Service.
 
-Supports parsing of JSON/SARIF outputs from tools like Semgrep, Trivy, Checkov, and Gitleaks.
-Also handles reading of source code snippets from the disk to provide context.
+This module is responsible for extracting findings from security scan reports.
+It unifies the output from various tools (Semgrep, Trivy, Checkov, Gitleaks, ZAP) into a standard format.
+It also reads source code snippets from the disk to provide context for the findings.
 """
 
 # Import json for parsing report files and os for path handling
-import json, os
+import json, os, glob
 # Import types for hints
 from typing import List, Dict, Any
 
 # Paths/Files to ignore when parsing findings to reduce noise
 FORBIDDEN_PATHS = [
-    ".github", 
-    "venv", 
-    "node_modules", 
-    "k8s-specifications",   # Stop K8s noise
-    "docker-compose",       # Stop Compose noise
-    "Dockerfile",           # Stop Docker noise
-    ".yml",                 # Stop all YAML noise
+    ".github",              # GitHub workflows
+    "venv",                 # Python virtual environments
+    "node_modules",         # Node.js dependencies
+    "k8s-specifications",   # Kubernetes manifests (high noise)
+    "docker-compose",       # Docker Compose files (configuration, not source)
+    "Dockerfile",           # Dockerfiles (often intentional patterns)
+    ".yml",                 # Generic YAML files
     ".yaml",                
-    "semgrep.sarif",
+    "semgrep.sarif",        # Our own scan outputs
     "gitleaks.json",
     "checkov.sarif"
 ]
+
+# Shared directory where scan reports are stored
+SCAN_DIR = "/tmp/scans"
 
 # Define function to extract findings from raw file content based on filename/type
 def extract_findings(content: bytes, filename: str) -> List[Dict[str, Any]]:
@@ -42,17 +46,19 @@ def extract_findings(content: bytes, filename: str) -> List[Dict[str, Any]]:
         data = json.loads(content)
         extracted = []
         
-        # --- 1. SARIF Logic (Semgrep, Trivy, Checkov) ---
+        # --- SARIF Format (Semgrep, Trivy, Checkov) ---
+        # SARIF is a standard format with runs[] containing results[]
         if "runs" in data:
             for run in data.get("runs", []):
+                # Extract tool name from SARIF metadata
                 tool = run.get("tool", {}).get("driver", {}).get("name", "Unknown")
                 for res in run.get("results", []):
+                    # Extract file path from deeply nested location structure
                     file_path = res.get("locations", [{}])[0].get("physicalLocation", {}).get("artifactLocation", {}).get("uri", "")
                     file_path = _clean_path(file_path)
                     
-                    # 🔥 FIREWALL: Skip forbidden files
+                    # Filter out findings in ignored paths to reduce noise
                     if any(forbidden in file_path for forbidden in FORBIDDEN_PATHS):
-                        # print(f"🚫 Firewall: Ignoring finding in {file_path}")
                         continue
 
                     extracted.append({
@@ -63,12 +69,13 @@ def extract_findings(content: bytes, filename: str) -> List[Dict[str, Any]]:
                         "line": res.get("locations", [{}])[0].get("physicalLocation", {}).get("region", {}).get("startLine", 0)
                     })
         
-        # --- 2. Gitleaks Logic (Custom JSON format) ---
+        # --- Gitleaks Format (custom JSON array) ---
+        # Gitleaks outputs an array of objects with specific field names
         elif isinstance(data, list) and len(data) > 0 and "Description" in data[0]:
             for issue in data:
                 file_path = _clean_path(issue.get("File", ""))
                 
-                # 🔥 FIREWALL: Skip forbidden files
+                # Filter out findings in ignored paths
                 if any(forbidden in file_path for forbidden in FORBIDDEN_PATHS):
                     continue
 
@@ -80,17 +87,18 @@ def extract_findings(content: bytes, filename: str) -> List[Dict[str, Any]]:
                     "line": issue.get("StartLine")
                 })
 
-        # --- 3. OWASP ZAP Logic (JSON format) ---
+        # --- OWASP ZAP Format (site[] with alerts[]) ---
         elif "site" in data:
             for site in data.get("site", []):
                 for alert in site.get("alerts", []):
+                    # Combine alert info into a detailed message
                     extracted.append({
                         "tool": "OWASP ZAP",
                         "rule_id": alert.get("pluginid"),
                         "message": f"{alert.get('name')} (Risk: {alert.get('riskdesc')})\nURL: {alert.get('url', 'N/A')}\nSolution: {alert.get('solution', 'N/A')}",
-                        "file": "dast-report", 
-                        "line": 0,
-                        "dast_endpoint": alert.get("url")
+                        "file": "dast-report",   # DAST has no file, use placeholder
+                        "line": 0,                # DAST has no line number
+                        "dast_endpoint": alert.get("url")  # Store the vulnerable URL
                     })
         
         print(f"✅ Parser: Extracted {len(extracted)} valid findings from {filename}")
@@ -165,3 +173,27 @@ def populate_snippets(findings: List[Dict], source_root: str):
 
             except Exception as e:
                 print(f"❌ Could not read file {path}: {e}")
+
+def parse_scan_report(scan_id: str) -> List[Dict[str, Any]]:
+    """
+    Parses all report files matching the scan_id in the SCAN_DIR.
+    """
+    all_findings = []
+    
+    if not os.path.exists(SCAN_DIR): return []
+
+    # Look for any file containing scan_id
+    files = glob.glob(os.path.join(SCAN_DIR, f"*{scan_id}*"))
+    
+    for fpath in files:
+        if fpath.endswith("_src") or os.path.isdir(fpath): continue 
+        
+        try:
+            with open(fpath, 'rb') as f:
+                content = f.read()
+                findings = extract_findings(content, os.path.basename(fpath))
+                all_findings.extend(findings)
+        except Exception as e:
+            print(f"Failed to read {fpath}: {e}")
+            
+    return all_findings

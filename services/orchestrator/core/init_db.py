@@ -1,3 +1,12 @@
+"""
+Database Initialization Module.
+
+This module assumes responsibility for:
+1. Verifying database connectivity (with retries).
+2. Creating tables based on SQLAlchemy models.
+3. Performing auto-migrations for schema updates (backward compatibility).
+"""
+
 from dotenv import load_dotenv
 
 # Ensure environment variables are loaded FIRST
@@ -8,6 +17,17 @@ from common.core import models
 from sqlalchemy import text
 
 def init_db():
+    """
+    Initializes the database connection and schema.
+    
+    Performs the following steps:
+    1. Retries connection to the database until successful or max retries reached.
+    2. Creates all tables defined in `models.Base`.
+    3. Checks and applies necessary schema migrations for existing tables.
+    
+    Raises:
+        OperationalError: If the database is unreachable after all retries.
+    """
     print("🚀 Initializing database...")
     
     # Retry loop for DB connection
